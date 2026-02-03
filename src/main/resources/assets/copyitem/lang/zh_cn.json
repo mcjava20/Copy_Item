@@ -1,0 +1,9 @@
+{
+  "itemGroup.copyitem": "物品复制机",
+  "block.copyitem.copyitem": "物品复制机",
+  "item.copyitem.copyitem": "物品复制机",
+  "container.copyitem.copyitem": "物品复制机",
+
+  "copyitem.configuration.title": "物品复制机配置",
+  "copyitem.configuration.copyAmount": "复制数量"
+}

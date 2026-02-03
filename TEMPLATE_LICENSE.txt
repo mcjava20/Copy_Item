@@ -1,0 +1,810 @@
+MIT License
+
+Copyright (c) 2023 NeoForged project
+
+This license applies to the template files as supplied by github.com/NeoForged/MDK
+
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+Configuration
+Configurations define settings and consumer preferences that can be applied to a mod instance. NeoForge uses a configuration system using TOML files and read with NightConfig.
+
+Creating a Configuration
+A configuration can be created using a subtype of IConfigSpec. NeoForge implements the type via ModConfigSpec and enables its construction through ModConfigSpec.Builder. The builder can separate the config values into sections via Builder#push to create a section and Builder#pop to leave a section. Afterwards, the configuration can be built using one of two methods:
+
+Method	Description
+build	Creates the ModConfigSpec.
+configure	Creates a pair of the class holding the config values and the ModConfigSpec.
+note
+ModConfigSpec.Builder#configure is typically used with a static block and a class that takes in ModConfigSpec.Builder as part of its constructor to attach and hold the values:
+
+//Define a field to keep the config and spec for later
+public static final ExampleConfig CONFIG;
+public static final ModConfigSpec CONFIG_SPEC;
+
+private ExampleConfig(ModConfigSpec.Builder builder) {
+    // Define properties used by the configuration
+    // ...
+}
+
+//CONFIG and CONFIG_SPEC are both built from the same builder, so we use a static block to seperate the properties
+static {
+    Pair<ExampleConfig, ModConfigSpec> pair =
+            new ModConfigSpec.Builder().configure(ExampleConfig::new);
+        
+    //Store the resulting values
+    CONFIG = pair.getLeft();
+    CONFIG_SPEC = pair.getRight();
+}
+
+
+Each config value can be supplied with additional context to provide additional behavior. Contexts must be defined before the config value is fully built:
+
+Method	Description
+comment	Provides a description of what the config value does. Can provide multiple strings for a multiline comment.
+translation	Provides a translation key for the name of the config value.
+worldRestart	The world must be restarted before the config value can be changed.
+gameRestart	The game must be restarted before the config value can be changed.
+ConfigValue
+Config values can be built with the provided contexts (if defined) using any of the #define methods.
+
+All config value methods take in at least two components:
+
+A path representing the name of the variable: a . separated string representing the sections the config value is in
+The default value when no valid configuration is present
+The ConfigValue specific methods take in two additional components:
+
+A validator to make sure the deserialized object is valid
+A class representing the data type of the config value
+//Store the config properties as public finals
+public final ModConfigSpec.ConfigValue<String> welcomeMessage;
+
+private ExampleConfig(ModConfigSpec.Builder builder) {
+    //Define each property
+    //One property could be a message to log to the console when the game is initialised
+    welcomeMessage = builder.define("welcome_message", "Hello from the config!");
+}
+
+The values themselves can be obtained using ConfigValue#get. The values are additionally cached to prevent multiple readings from files.
+
+Additional Config Value Types
+Range Values
+Description: Value must be between the defined bounds
+Class Type: Comparable<T>
+Method Name: #defineInRange
+Additional Components:
+The minimum and maximum the config value may be
+A class representing the data type of the config value
+note
+DoubleValues, IntValues, and LongValues are range values which specify the class as Double, Integer, and Long respectively.
+
+Whitelisted Values
+
+Description: Value must be in supplied collection
+Class Type: T
+Method Name: #defineInList
+Additional Components:
+A collection of the allowed values the configuration can be
+List Values
+
+Description: Value is a list of entries
+Class Type: List<T>
+Method Name: #defineList, #defineListAllowEmpty if list can be empty
+Additional Components:
+A supplier that returns a default value to use when a new entry is added in configuration screens.
+A validator to make sure a deserialized element from the list is valid
+(optional) A vaidator to make sure the list does not get too little or too many entries
+Enum Values
+
+Description: An enum value in the supplied collection
+Class Type: Enum<T>
+Method Name: #defineEnum
+Additional Components:
+A getter to convert a string or integer into an enum
+A collection of the allowed values the configuration can be
+Boolean Values
+
+Description: A boolean value
+Class Type: Boolean
+Method Name: #define
+Registering a Configuration
+Once a ModConfigSpec has been built, it must be registered to allow NeoForge to load, track, and sync the configuration settings as required. Configurations should be registered in the mod constructor via ModConatiner#registerConfig. A configuration can be registered with a given type representing the side the config belongs to, the ModConfigSpec, and optionally a specific file name for the configuration.
+
+// In the main mod file with a ModConfigSpec CONFIG
+public ExampleMod(ModContainer container) {
+    ...
+    //Register the config
+    container.registerConfig(ModConfig.Type.COMMON, ExampleConfig.CONFIG);
+    ...
+}
+
+Configuration Types
+Configuration types determine where the configuration file is located, what time it is loaded, and whether the file is synced across the network. All configurations are, by default, either loaded from .minecraft/config on the physical client or <server_folder>/config on the physical server. Some nuances between each configuration type can be found in the following subsections.
+
+tip
+NeoForge documents the config types within their codebase.
+
+STARTUP
+Loaded on both the physical client and physical server from the config folder
+Read immediately on registration
+NOT synced across the network
+Suffixed with -startup by default
+warning
+Configurations registered under the STARTUP type can cause desyncs between the client and server, such as if the configuration is used to disable the registration of content. Therefore, it is highly recommended that any configurations within STARTUP are not used to enable or disable features that may change the content of the mod.
+
+CLIENT
+Loaded ONLY on the physical client from the config folder
+There is no server location for this configuration type
+Read immedately before FMLCommonSetupEvent is fired
+NOT synced across the network
+Suffixed with -client by default
+COMMON
+Loaded on both the physical client and physical server from the config folder
+Read immedately before FMLCommonSetupEvent is fired
+NOT synced across the network
+Suffixed with -common by default
+SERVER
+Loaded on both the physical client and physical server from the config folder
+Can be overridden for each world by adding a config to:
+Client: .minecraft/saves/<world_name>/serverconfig
+Server: <server_folder>/world/serverconfig
+Read immedately before ServerAboutToStartEvent is fired
+Synced across the network to the client
+Suffixed with -server by default
+Configuration Events
+Operations that occur whenever a config is loaded, reloaded, or unloaded can be done using the ModConfigEvent.Loading, ModConfigEvent.Reloading, and ModConfigEvent.Unloading events. The events must be registered to the mod event bus.
+
+caution
+These events are called for all configurations for the mod; the ModConfig object provided should be used to denote which configuration is being loaded or reloaded.
+
+Configuration Screen
+A configuration screen allows users to edit the config values for a mod while in-game without needing to open any files. The screen will automatically parse your registered config files and populate the screen.
+
+A mod can use the built-in configuration screen that NeoForge provides. Mods can extend ConfigurationScreen to change the behavior of the default screen or make their own configuration screen. Mods can also create their own screen from scratch and provide that custom screen to NeoForge through the below extension point.
+
+A configuration screen can be registered for a mod by registering a IConfigScreenFactory extension point during mod construction on the client:
+
+// In the main client mod file
+public ExampleModClient(ModContainer container) {
+    ...
+    // This will use NeoForge's ConfigurationScreen to display this mod's configs
+    container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
+    ...
+}
+
+The configuration screen can be accessed in game by going to the 'Mods' page, selecting the mod from the sidebar, and clicking the 'Config' button. Startup, Common, and Client config options will always be editable at any point. Server configs are only editable in the screen when playing on a world locally. If connected to a server or to another person's LAN world, Server config option will be disabled in the screen. The first page of the config screen for the mod will show every registered config file for players to pick which one to edit.
+
+warning
+Translation keys should be added and have the text defined within the lang JSON for all config entries if you are making a screen.
+
+You can specify a translation key for a config by using the ModConfigSpec$Builder#translation method, so we can extend the previous code to:
+
+ConfigValue<T> value = builder.comment("This value is called 'config_value_name', and is set to defaultValue if no existing config is present")
+    .translation("modid.config.config_value_name")
+    .define("config_value_name", defaultValue);
+
+
+To make translating easier, open the configuration screen and visit all of the configs and their subsections. Then back out to the mod list screen. All untranslated config entries that were encountered will be printed to the console at this point. This makes it easier to know what to translate and what the translation keys are.
+
+NeoForge Update Checker
+NeoForge provides a very lightweight, opt-in, update-checking framework. If any mods have an available update, it will show a flashing icon on the 'Mods' button of the main menu and mod list along with the respective changelogs. It does not download updates automatically.
+
+Getting Started
+The first thing you want to do is specify the updateJSONURL parameter in your mods.toml file. The value of this parameter should be a valid URL pointing to an update JSON file. This file can be hosted on your own web server, GitHub, or wherever you want as long as it can be reliably reached by all users of your mod.
+
+Update JSON format
+The JSON itself has a relatively simple format as follows:
+
+{
+    "homepage": "<homepage/download page for your mod>",
+    "<mcversion>": {
+        "<modversion>": "<changelog for this version>", 
+        // List all versions of your mod for the given Minecraft version, along with their changelogs
+        // ...
+    },
+    "promos": {
+        "<mcversion>-latest": "<modversion>",
+        // Declare the latest "bleeding-edge" version of your mod for the given Minecraft version
+        "<mcversion>-recommended": "<modversion>",
+        // Declare the latest "stable" version of your mod for the given Minecraft version
+        // ...
+    }
+}
+
+This is fairly self-explanatory, but some notes:
+
+The link under homepage is the link the user will be shown when the mod is outdated.
+
+NeoForge uses an internal algorithm to determine whether one version string of your mod is "newer" than another. Most versioning schemes should be compatible, but see the ComparableVersion class if you are concerned about whether your scheme is supported. Adherence to Maven versioning is highly recommended.
+
+The changelog string can be separated into lines using \n. Some prefer to include a abbreviated changelog, then link to an external site that provides a full listing of changes.
+
+Manually inputting data can be chore. You can configure your build.gradle to automatically update this file when building a release as Groovy has native JSON parsing support. Doing this is left as an exercise to the reader.
+
+Some examples can be found here for nocubes, Corail Tombstone and Chisels & Bits 2.
+
+Retrieving Update Check Results
+You can retrieve the results of the NeoForge Update Checker using VersionChecker#getResult(IModInfo). You can obtain your IModInfo via ModContainer#getModInfo, where ModContainer can be added as a parameter to your mod constructor. You can obtain any other mod's ModContainer using ModList.get().getModContainerById(<modId>). The returned object has a method #status which indicates the status of the version check.
+
+Status	Description
+FAILED	The version checker could not connect to the URL provided.
+UP_TO_DATE	The current version is equal to the recommended version.
+AHEAD	The current version is newer than the recommended version if there is not latest version.
+OUTDATED	There is a new recommended or latest version.
+BETA_OUTDATED	There is a new latest version.
+BETA	The current version is equal to or newer than the latest version.
+PENDING	The result requested has not finished yet, so you should try again in a little bit.
+The returned object will also have the target version and any changelog lines as specified in update.json.
+
+
+Game Tests
+Game Tests are a way to run in-game unit tests. The system was designed to be scalable and in parallel to run large numbers of different tests efficiently. Testing object interactions and behaviors are simply a few of the many applications of this framework. As the system can either be implemented fully in-code or via datapacks, both will be shown below.
+
+Creating a Game Test
+A standard Game Test follows four basic steps:
+
+A structure, or template, is loaded holding the scene on which the interaction or behavior is tested.
+An environment for the test to run in.
+A registered function to run the logic. If a successful state is reached, then the test succeeds. Otherwise, the test fails and the result is stored within a lectern adjacent to the scene.
+A test instance to link the other three objects together.
+The Test Data
+All test instances hold some TestData which defines how a game test should be run, from its initial configurations to the environment and structure template to use. As the TestData is serialized as a MapCodec, the data is stored at the root level of the file along with all the other instance-specific parameters.
+
+JSON
+Datagen
+// For some game test examplemod:example_test
+// In 'data/examplemod/test_instance/example_test.json'
+{
+    // `TestData`
+
+    // The environment to run the test in
+    // Points to 'data/examplemod/test_environment/example_environment.json'
+    "environment": "examplemod:example_environment",
+
+    // The structure used for the game test
+    // Points to 'data/examplemod/structure/example_structure.nbt'
+    "structure": "examplemod:example_structure",
+
+    // The number of ticks that the game test will run until it automatically fails
+    "max_ticks": 400,
+
+    // The number of ticks that are used to setup everything required for the game test
+    // This is not counted towards the maximum number of ticks the test can take
+    // If not specified, defaults to 0
+    "setup_ticks": 50,
+
+    // Whether the test is required to succeed to mark the batch run as successful
+    // If not specified, defaults to true
+    "required": true,
+
+    // Specifies how the structure and all subsequent helper methods should be rotated for the test
+    // If not specified, nothing is rotated
+    // Can be 'none', 'clockwise_90', '180', 'counterclockwise_90'
+    "rotation": "clockwise_90",
+
+    // When true, the test can only be ran through the `/test` command
+    // If not specified, defaults to false
+    "manual_only": true,
+
+    // Specifies the maximum number of times that the test can be reran
+    // If not specified, defaults to 1
+    "max_attempts": 3,
+
+    // Specifies the minimum number of successes that must occur for a test to be marked as successful
+    // This must be less than or equal to the maximum number of attempts allowed
+    // If not specified, defaults to 1
+    "required_successes": 1,
+
+    // Returns whether the structure boundary should keep the top empty
+    // This is currently only used in block-based test instances
+    // If not specified, defaults to false 
+    "sky_access": false
+
+    // ...
+}
+
+Structure Templates
+Game Tests are performed within scenes loaded by structures, or templates. All templates define the dimensions of the scene and the initial data (blocks and entities) that will be loaded. The template must be stored as an .nbt file within data/<namespace>/structure. TestData#structure references the NBT file using a relative ResourceLocation (e.g., examplemod:example_structure points to data/examplemod/structure/example_structure.nbt)
+
+Test Environments
+All game tests run in some TestEnvironmentDefinition, determining how the current ServerLevel should be set up. Then, once the test has finished, the environment is tore down, letting the next instance or instances run. All environments are batched, meaning that if multiple test instances have the same environment, they will run at the same time. All test environments are located within data/<namespace>/test_environment/<path>.json.
+
+Vanilla provides minecraft:default, which does not modify the ServerLevel. However, there are other supported definition types that can be used to construct an environment.
+
+Game Rules
+This environment type sets the game rules to use for the test. During teardown, the game rules are reset to their default value.
+
+JSON
+Datagen
+// examplemod:example_environment
+// In 'data/examplemod/test_environment/example_environment.json'
+{
+    "type": "minecraft:game_rules",
+
+    // A list of game rules with boolean values to set
+    "bool_rules": [
+        {
+            // The name of the rule
+            "rule": "doFireTick",
+            "value": false
+        }
+        // ...
+    ],
+
+    // A list of game rules with integer values to set
+    "int_rules": [
+        {
+            "rule": "playersSleepingPercentage",
+            "value": 50
+        }
+        // ...
+    ]
+}
+
+Time of Day
+This environment type sets the time to some non-negative integer, like how the /time set <number> command is used.
+
+JSON
+Datagen
+// examplemod:example_environment
+// In 'data/examplemod/test_environment/example_environment.json'
+{
+    "type": "minecraft:time_of_day",
+
+    // Sets the time of day in the world
+    // Common values:
+    // - Day      -> 1000
+    // - Noon     -> 6000
+    // - Night    -> 13000
+    // - Midnight -> 18000
+    "time": 13000
+}
+
+Weather
+This environment type sets the weather, like to how the /weather command is used.
+
+JSON
+Datagen
+// examplemod:example_environment
+// In 'data/examplemod/test_environment/example_environment.json'
+{
+    "type": "minecraft:weather",
+
+    // Can be one of three values:
+    // - clear   (No weather)
+    // - rain    (Rain)
+    // - thunder (Rain and thunder)
+    "weather": "thunder"
+}
+
+Minecraft Functions
+This environment type provides two ResourceLocations to mcfunctions to setup and teardown the level, respectively.
+
+JSON
+Datagen
+// examplemod:example_environment
+// In 'data/examplemod/test_environment/example_environment.json'
+{
+    "type": "minecraft:function",
+
+    // The setup mcfunction to use
+    // If not specified, nothing will be ran
+    // Points to 'data/examplemod/function/example/setup.mcfunction'
+    "setup": "examplemod:example/setup",
+
+    // The teardown mcfunction to use
+    // If not specified, nothing will be ran
+    // Points to 'data/examplemod/function/example/teardown.mcfunction'
+    "teardown": "examplemod:example/teardown"
+}
+
+Composites
+Multiple environments can be merged using the composite environment type. The list of definitions can take in either a reference to an existing definiton, or an inlined definition.
+
+JSON
+Datagen
+// examplemod:example_environment
+// In 'data/examplemod/test_environment/example_environment.json'
+{
+    "type": "minecraft:all_of",
+
+    // A list of test environments to use
+    // Can either specified the registry name or the environment itself
+    "definitions": [
+        // Points to 'data/minecraft/test_environment/default.json'
+        "minecraft:default",
+        {
+            // A raw environment definition
+            "type": "..."
+        }
+        // ...
+    ]
+}
+
+Custom Definition Types
+A custom TestEnvironmentDefinition type provides three methods: setup to modify the ServerLevel, teardown to reset what was modified, and codec to provide the MapCodec to encode and decode the type:
+
+public record ExampleEnvironmentType(int value1, boolean value2) implements TestEnvironmentDefinition {
+
+    // Construct the map codec to register
+    public static final MapCodec<ExampleEnvironmentType> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
+            Codec.INT.fieldOf("value1").forGetter(ExampleEnvironmentType::value1),
+            Codec.BOOL.fieldOf("value2").forGetter(ExampleEnvironmentType::value2)
+        ).apply(instance, ExampleEnvironmentType::new)
+    );
+
+    @Override
+    public void setup(ServerLevel level) {
+        // Setup whatever is necessary here
+    }
+
+    @Override
+    public void teardown(ServerLevel level) {
+        // Undo whatever was changed within the setup method
+        // This should either return to default or the previous value
+    }
+
+    @Override
+    public MapCodec<ExampleEnvironmentType> codec() {
+        return EXAMPLE_ENVIRONMENT_CODEC.get();
+    }
+}
+
+
+Then, the MapCodec can be registered:
+
+public static final DeferredRegister<MapCodec<? extends TestEnvironmentDefinition>> TEST_ENVIRONMENT_DEFINITION_TYPES = DeferredRegister.create(
+        BuiltInRegistries.TEST_ENVIRONMENT_DEFINITION_TYPE,
+        "examplemod"
+);
+
+public static final Supplier<MapCodec<ExampleEnvironmentType>> EXAMPLE_ENVIRONMENT_CODEC = TEST_ENVIRONMENT_DEFINITION_TYPES.register(
+    "example_environment_type",
+    () -> RecordCodecBuilder.mapCodec(instance -> instance.group(
+            Codec.INT.fieldOf("value1").forGetter(ExampleEnvironmentType::value1),
+            Codec.BOOL.fieldOf("value2").forGetter(ExampleEnvironmentType::value2)
+        ).apply(instance, ExampleEnvironmentType::new)
+    )
+);
+
+
+Finally, the type can then be used in your environment definition:
+
+JSON
+Datagen
+// examplemod:example_environment
+// In 'data/examplemod/test_environment/example_environment.json'
+{
+    "type": "examplemod:example_environment_type",
+
+    "value1": 0,
+    "value2": true
+}
+
+The Test Function
+The basic concept of game tests are structured around running some method that takes in a GameTestHelper and returning nothing. Calling the methods within the GameTestHelper determines whether the test succeeds or fails. Each test function is registered, allowing it to be referenced in a test instance:
+
+public class ExampleFunctions {
+
+    // Here is our example function
+    public static void exampleTest(GameTestHelper helper) {
+        // Do Stuff
+    }
+}
+
+// Register our function for use
+public static final DeferredRegister<Consumer<GameTestHelper>> TEST_FUNCTION = DeferredRegister.create(
+        BuiltInRegistries.TEST_FUNCTION,
+        "examplemod"
+);
+
+public static final DeferredHolder<Consumer<GameTestHelper>, Consumer<GameTestHelper>> EXAMPLE_FUNCTION = TEST_FUNCTION.register(
+    "example_function",
+    () -> ExampleFunctions::exampleTest
+);
+
+
+Relative Positioning
+All test functions translate relative coordinates within the structure template scene to its absolute coordinates using the structure block's current location. To allow for easy conversion between relative and absolute positioning, GameTestHelper#absolutePos and GameTestHelper#relativePos can be used respectively.
+
+The relative position of a structure template can be obtained in-game by loading the structure via the test command, placing the player at the wanted location, and finally running the /test pos command. This will grab the coordinates of the player relative to the closest structure within 200 blocks of the player. The command will export the relative position as a copyable text component in the chat to be used as a final local variable.
+
+tip
+The local variable generated by /test pos can specify its reference name by appending it to the end of the command:
+
+/test pos <var> # Exports 'final BlockPos <var> = new BlockPos(...);'
+
+Successful Completion
+A test function is responsible for one thing: marking the test was successful on a valid completion. If no success state was achieved before the timeout is reached (as defined by TestData#maxTicks), then the test automatically fails.
+
+There are many abstracted methods within GameTestHelper which can be used to define a successful state; however, four are extremely important to be aware of.
+
+Method	Description
+#succeed	The test is marked as successful.
+#succeedIf	The supplied Runnable is tested immediately and succeeds if no GameTestAssertException is thrown. If the test does not succeed on the immediate tick, then it is marked as a failure.
+#succeedWhen	The supplied Runnable is tested every tick until timeout and succeeds if the check on one of the ticks does not throw a GameTestAssertException.
+#succeedOnTickWhen	The supplied Runnable is tested on the specified tick and will succeed if no GameTestAssertException is thrown. If the Runnable succeeds on any other tick, then it is marked as a failure.
+caution
+Game Tests are executed every tick until the test is marked as a success. As such, methods which schedule success on a given tick must be careful to always fail on any previous tick.
+
+Scheduling Actions
+Not all actions will occur when a test begins. Actions can be scheduled to occur at specific times or intervals:
+
+Method	Description
+#runAtTickTime	The action is ran on the specified tick.
+#runAfterDelay	The action is ran x ticks after the current tick.
+#onEachTick	The action is ran every tick.
+Assertions
+At any time during a Game Test, an assertion can be made to check if a given condition is true. There are numerous assertion methods within GameTestHelper; however, it simplifies to throwing a GameTestAssertException whenever the appropriate state is not met.
+
+Registering The Test Instance
+With the TestData, TestEnvironmentDefinition, and test function in hand, we can now link everything together through a GameTestInstance. Each test instance is what represents a single game test to run. All test instances are located within data/<namespace>/test_instance/<path>.json.
+
+Function-Based Tests
+FunctionGameTestInstance links a TestData to some registered test function. The test instance will run the test function when called.
+
+JSON
+Datagen
+// For some game test examplemod:example_test
+// In 'data/examplemod/test_instance/example_test.json'
+{
+    // `TestData`
+
+    "environment": "examplemod:example_environment",
+    "structure": "examplemod:example_structure",
+    "max_ticks": 400,
+    "setup_ticks": 50,
+    "required": true,
+    "rotation": "clockwise_90",
+    "manual_only": true,
+    "max_attempts": 3,
+    "required_successes": 1,
+    "sky_access": false,
+
+    // `FunctionGameTestInstance`
+    "type": "minecraft:function",
+
+    // Points to a 'Consumer<GameTestHelper>' in the test function registry
+    "function": "examplemod:example_function"
+}
+
+Block-Based Tests
+BlockBasedTestInstance is a special kind of test instance that relies on redstone signals sent and received by Blocks#TEST_BLOCKs. For this test to work, the structure template must contain at least two test blocks: one and only one set to TestBlockMode#START and one set to TestBlockMode#ACCEPT. When the test starts, the starting test block is triggered, sending a fifteen signal pulse for one tick. It is expected that this signal eventually triggers other test blocks in either LOG, FAIL, or ACCEPT states. LOG test blocks also send a fifteen signal pulse when activated. ACCEPT and FAIL test blocks either cause the test instance to succeed or fail, respectively. ACCEPT always takes precedence over FAIL on a given tick.
+
+JSON
+Datagen
+// For some game test examplemod:example_test
+// In 'data/examplemod/test_instance/example_test.json'
+{
+    // `TestData`
+
+    "environment": "examplemod:example_environment",
+    "structure": "examplemod:example_structure",
+    "max_ticks": 400,
+    "setup_ticks": 50,
+    "required": true,
+    "rotation": "clockwise_90",
+    "manual_only": true,
+    "max_attempts": 3,
+    "required_successes": 1,
+    "sky_access": false,
+
+    // `BlockBasedTestInstance`
+    "type": "minecraft:block_based"
+}
+
+Custom Test Instances
+If you need to implement your own test-based logic for whatever reason, GameTestInstance can be extended. Two methods must be implemented: run, which represents the test function; and typeDescription, which provides a description of the test instance. If the test instance should be used in datagen, it must have a MapCodec to be registered.
+
+public class ExampleTestInstance extends GameTestInstance {
+
+    public ExampleTestInstance(int value1, boolean value2, TestData<Holder<TestEnvironmentDefinition>> info) {
+        super(info);
+    }
+
+    @Override
+    public void run(GameTestHelper helper) {
+        // Run whatever game test commands you want
+        helper.assertBlockPresent(...);
+
+        // Make sure you have some way to succeed
+        helper.succeedIf(() -> ...);
+    }
+
+    @Override
+    public MapCodec<ExampleTestInstance> codec() {
+        return EXAMPLE_INSTANCE_CODEC.get();
+    }
+
+    @Override
+    protected MutableComponent typeDescription() {
+        // Provides a description about what this test is supposed to be
+        // Should use a translatable component
+        return Component.literal("Example Test Instance");
+    }
+}
+
+// Register our test instance for use
+public static final DeferredRegister<MapCodec<? extends GameTestInstance>> TEST_INSTANCE = DeferredRegister.create(
+        BuiltInRegistries.TEST_INSTANCE_TYPE,
+        "examplemod"
+);
+
+public static final Supplier<MapCodec<? extends GameTestInstance>> EXAMPLE_INSTANCE_CODEC = TEST_INSTANCE.register(
+    "example_test_instance",
+    () -> RecordCodecBuilder.mapCodec(instance -> instance.group(
+            Codec.INT.fieldOf("value1").forGetter(test -> test.value1),
+            Codec.BOOL.fieldOf("value2").forGetter(test -> test.value2),
+            TestData.CODEC.forGetter(ExampleTestInstance::info)
+        ).apply(instance, ExampleTestInstance::new)
+    )
+);
+
+Then, the test instance can be used in a datapack:
+
+JSON
+Datagen
+// For some game test examplemod:example_test
+// In 'data/examplemod/test_instance/example_test.json'
+{
+    // `TestData`
+
+    "environment": "examplemod:example_environment",
+    "structure": "examplemod:example_structure",
+    "max_ticks": 400,
+    "setup_ticks": 50,
+    "required": true,
+    "rotation": "clockwise_90",
+    "manual_only": true,
+    "max_attempts": 3,
+    "required_successes": 1,
+    "sky_access": false,
+
+    // `ExampleTestInstance`
+    "type": "examplemod:example_test_instance",
+
+    "value1": 0,
+    "value2": true
+}
+
+Skipping the Datapack
+If you don't want to use a datapack to construct your game tests, you can instead listen to the RegisterGameTestsEvent on the mod event bus and register your environments and test instances via registerEnvironment and registerTest, respectively.
+
+@SubscribeEvent // on the mod event bus
+public static void registerTests(RegisterGameTestsEvent event) {
+    Holder<TestEnvironmentDefinition> environment = event.registerEnvironment(
+        // The name of the test environment
+        EXAMPLE_ENVIRONMENT.location(),
+        // A varargs of test environment definitions
+        new ExampleEnvironmentType(
+            0, true
+        )
+    );
+
+    event.registerTest(
+        // The name of the test instance
+        EXAMPLE_TEST_INSTANCE.location(),
+        new ExampleTestInstance(
+            0,
+            true,
+            new TestData<>(
+                environments.getOrThrow(EXAMPLE_ENVIRONMENT),
+                ResourceLocation.fromNamespaceAndPath("examplemod", "example_structure"),
+                400,
+                50,
+                true,
+                Rotation.CLOCKWISE_90,
+                true,
+                3,
+                1,
+                false
+            )
+        )
+    );
+}
+
+Running Game Tests
+Game Tests can be run using the /test command. The test command is highly configurable; however, only a few are of importance to running tests:
+
+Subcommand	Description
+run	Runs the specified test: run <test_name>.
+runall	Runs all available tests.
+runclosest	Runs the nearest test to the player within 15 blocks.
+runthese	Runs tests within 200 blocks of the player.
+runfailed	Runs all tests that failed in the previous run.
+note
+Subcommands follow the test command: /test <subcommand>.
+
+Buildscript Configurations
+Game Tests provide additional configuration settings within a buildscript (the build.gradle file) to run and integrate into different settings.
+
+Game Test Server Run Configuration
+The Game Test Server is a special configuration which runs a build server. The build server returns an exit code of the number of required, failed Game Tests. All failed tests, whether required or optional, are logged. This server can be run using gradlew runGameTestServer.
+
+Enabling Game Tests in Other Run Configurations
+By default, only the client and gameTestServer run configurations have Game Tests enabled. If another run configuration should run Game Tests, then the neoforge.enableGameTest property must be set to true.
+
+// Inside a run configuration
+property 'neoforge.enableGameTest', 'true'
+
+
+Debug Profiler
+Minecraft provides a Debug Profiler that provides system data, current game settings, JVM data, level data, and sided tick information to find time consuming code. Considering things like TickEvents and ticking BlockEntitys, this can be very useful for modders and server owners that want to find a lag source.
+
+Using the Debug Profiler
+The Debug Profiler is very simple to use. It requires the debug keybind F3 + L to start the profiler. After 10 seconds, it will automatically stop; however, it can be stopped earlier by pressing the keybind again.
+
+note
+Naturally, you can only profile code paths that are actually being reached. Entities and BlockEntities that you want to profile must exist in the level to show up in the results.
+
+After you have stopped the debugger, it will create a new zip within the debug/profiling subdirectory in your run directory. The file name will be formatted with the date and time as yyyy-mm-dd_hh_mi_ss-WorldName-VersionNumber.zip
+
+Reading a Profiling result
+Within each sided folder (client and server), you will find a profiling.txt file containing the result data. At the top, it first tells you how long in milliseconds it was running and how many ticks ran in that time.
+
+Below that, you will find information similar to the snippet below:
+
+[00] tick(201/1) - 41.46%/41.46%
+[01] |   levels(201/1) - 96.62%/40.05%
+[02] |   |   ServerLevel[New World] minecraft:overworld(201/1) - 98.80%/39.58%
+[03] |   |   |   tick(201/1) - 99.98%/39.57%
+[04] |   |   |   |   entities(201/1) - 56.83%/22.49%
+[05] |   |   |   |   |   tick(44717/222) - 95.81%/21.54%
+[06] |   |   |   |   |   |   minecraft:skeleton(4585/23) - 13.91%/3.00%
+[07] |   |   |   |   |   |   |   #tickNonPassenger 4585/22
+[07] |   |   |   |   |   |   |   travel(4573/23) - 33.12%/0.99%
+[08] |   |   |   |   |   |   |   |   #getChunkCacheMiss 7/0
+[08] |   |   |   |   |   |   |   |   #getChunk 47227/234
+[08] |   |   |   |   |   |   |   |   move(4573/23) - 40.10%/0.40%
+[09] |   |   |   |   |   |   |   |   |   #getEntities 4573/22
+[09] |   |   |   |   |   |   |   |   |   #getChunkCacheMiss 1353/6
+[09] |   |   |   |   |   |   |   |   |   #getChunk 28482/141
+[08] |   |   |   |   |   |   |   |   unspecified(4573/23) - 36.24%/0.36%
+[08] |   |   |   |   |   |   |   |   rest(4573/23) - 23.66%/0.23%
+[09] |   |   |   |   |   |   |   |   |   #getChunkCacheMiss 59/0
+[09] |   |   |   |   |   |   |   |   |   #getChunk 65867/327
+[09] |   |   |   |   |   |   |   |   |   #getChunkNow 531/2
+
+Some entries look like [03] tick(201/1) - 99.98%/39.57% as a result of ProfilerFiller#push and pop. This means:
+
+[03] - The depth of the section.
+tick - The name of the section.
+unspecified if the duration of time did not have an associated subsection.
+201 - The number of times this section was called during the profiler's runtime.
+1 - The average number of times, rounded down, this section was called during a single tick.
+99.98% - The percentage of time taken in relation to its parent.
+For Layer 0, it is the percentage of the time a tick takes.
+For Layer 1, it is the percentage of the time its parent takes.
+39.57% - The percentage of time taken from the entire tick.
+There are also some entries that look like [07] #tickNonPassenger 4585/22 as a result of ProfileFiller#incrementCounter. This means:
+
+[07] - The depth of the section.
+#tickNonPassenger - The name of the counter being incremented.
+The # is prepended automatically.
+4585 - The number of times this counter was incremented during the profiler's runtime.
+22 - The average number of times, rounded down, this counter was incremented during a single tick.
+Profiling your own code
+The Debug Profiler has basic support for Entity and BlockEntity. If you would like to profile something else, you may need to manually create your sections like so:
+
+Profiler.get().push("yourSectionName");
+//The code you want to profile
+Profiler.get().pop();
+
+Now you just need to search the results file for your section name.

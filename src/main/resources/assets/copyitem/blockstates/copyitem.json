@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "copyitem:block/copyitem"
+    },
+    "facing=east": {
+      "model": "copyitem:block/copyitem",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "copyitem:block/copyitem",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "copyitem:block/copyitem",
+      "y": 270
+    }
+  }
+}

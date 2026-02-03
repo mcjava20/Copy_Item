@@ -1,0 +1,9 @@
+{
+  "itemGroup.copyitem": "Item Copier",
+  "block.copyitem.copyitem": "Item Copier",
+  "item.copyitem.copyitem": "Item Copier",
+  "container.copyitem.copyitem": "Item Copier",
+
+  "copyitem.configuration.title": "Item Copier Config",
+  "copyitem.configuration.copyAmount": "Copy Amount"
+}

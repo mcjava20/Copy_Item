@@ -1,0 +1,15 @@
+[
+{
+  "modid": "copyitem",
+  "name": "Copy-Item",
+  "description": "A chest that automatically fills with copies of any item placed inside.",
+  "version": "",
+  "mcversion": "",
+  "url": "https://modrinth.com/mod/copy-item",
+  "authorList": ["mcjava20"],
+  "credits": "",
+  "logoFile": "logo.png",
+  "screenshots": [],
+  "dependencies": ["forge"]
+}
+]
